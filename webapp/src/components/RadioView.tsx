@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { callEnDeCom } from '../services/encryption';
 import { serialClient, type SerialEvent, type SerialStatus } from '../services/serialClient';
+import { decodeMtrxFrame, type DecodedMtrx } from '../services/meshtasticDecoder';
 
 type Tab = 'messages' | 'peers' | 'sniffer' | 'telemetry' | 'console';
 
@@ -20,6 +21,7 @@ interface MtrxRecord {
   rssi: number;
   snr: number;
   payload: string;
+  decoded?: DecodedMtrx;
 }
 
 interface ParsedMeshtasticFrame {
@@ -101,8 +103,18 @@ export function RadioView() {
   const [mtrxLog, setMtrxLog] = useState<MtrxRecord[]>([]);
   const [rawLog, setRawLog] = useState<{ ts: number; dir: 'in' | 'out'; line: string }[]>([]);
   const [lastStatus, setLastStatus] = useState<Record<string, unknown> | null>(null);
-  const [observerMode, setObserverMode] = useState(false);
-  const [observerEnabledAt, setObserverEnabledAt] = useState<number | null>(null);
+  const [observerMode, setObserverMode] = useState(() => localStorage.getItem('observerMode') === 'true');
+  const [observerEnabledAt, setObserverEnabledAt] = useState<number | null>(() => {
+    const v = localStorage.getItem('observerEnabledAt');
+    return v ? Number(v) : null;
+  });
+
+  // Auto-restore observer mode on reconnect
+  useEffect(() => {
+    if (status === 'connected' && observerMode) {
+      serialClient.sendLine('BN MESH ON').catch(() => {});
+    }
+  }, [status]);
 
   // Subscribe to serial events.
   useEffect(() => {
@@ -117,7 +129,14 @@ export function RadioView() {
           if (e.data) setRxLog((prev) => [...prev.slice(-MAX_LOG + 1), { ts: Date.now(), ...(e.data as Omit<RxRecord, 'ts'>) }]);
           break;
         case 'mtrx':
-          if (e.data) setMtrxLog((prev) => [...prev.slice(-MAX_LOG + 1), { ts: Date.now(), ...(e.data as Omit<MtrxRecord, 'ts'>) }]);
+          if (e.data) {
+            const rec = { ts: Date.now(), ...(e.data as Omit<MtrxRecord, 'ts'>) };
+            // Decode async, update record when done
+            decodeMtrxFrame(rec.payload).then(decoded => {
+              setMtrxLog(prev => prev.map(r => r.ts === rec.ts && r.payload === rec.payload ? { ...r, decoded } : r));
+            });
+            setMtrxLog((prev) => [...prev.slice(-MAX_LOG + 1), rec]);
+          }
           break;
         case 'status':
           if (e.data) setLastStatus(e.data as Record<string, unknown>);
@@ -203,7 +222,10 @@ export function RadioView() {
           onToggle={async () => {
             const next = !observerMode;
             setObserverMode(next);
-            setObserverEnabledAt(next ? Date.now() : null);
+            localStorage.setItem('observerMode', String(next));
+            const ts = next ? Date.now() : null;
+            setObserverEnabledAt(ts);
+            localStorage.setItem('observerEnabledAt', ts ? String(ts) : '');
             await send(next ? 'BN MESH ON' : 'BN MESH OFF');
           }}
         />
@@ -556,39 +578,48 @@ function SnifferTab({
               <th className="text-left p-2">to</th>
               <th className="text-left p-2">id</th>
               <th className="text-left p-2">ch</th>
-              <th className="text-left p-2">flags</th>
-              <th className="text-left p-2">payload</th>
+              <th className="text-left p-2">decoded</th>
               <th className="text-left p-2">hex</th>
             </tr>
           </thead>
           <tbody>
             {mtrxLog.slice().reverse().map((r, i) => {
               const parsed = parseMeshtasticFrame(r.payload);
+              const d = r.decoded;
+              let decodedCell = <span className="text-gray-500">{parsed ? `${parsed.payloadBytes}B encrypted` : 'unknown'}</span>;
+              if (d?.decrypted) {
+                if (d.text) {
+                  decodedCell = <span className="text-green-300">💬 {d.text}</span>;
+                } else if (d.nodeInfo?.longName) {
+                  decodedCell = <span className="text-cyan-300">👤 {d.nodeInfo.longName} ({d.nodeInfo.shortName})</span>;
+                } else if (d.position?.latitude != null) {
+                  decodedCell = <span className="text-yellow-300">📍 {d.position.latitude.toFixed(5)}, {d.position.longitude?.toFixed(5)}</span>;
+                } else {
+                  decodedCell = <span className="text-blue-300">{d.portnum ?? 'decrypted'}</span>;
+                }
+              }
               return (
                 <tr key={`${r.ts}-${i}`} className="border-t border-gray-800">
                   <td className="p-2 text-gray-400">{new Date(r.ts).toLocaleTimeString()}</td>
                   <td className="p-2">{r.rssi}</td>
                   <td className="p-2">{r.snr}</td>
-                  <td className="p-2 text-blue-300">{parsed?.from ?? 'unknown'}</td>
-                  <td className="p-2">{parsed ? `${parsed.kind}:${parsed.to}` : 'unknown'}</td>
-                  <td className="p-2">{parsed?.packetId ?? 'unknown'}</td>
-                  <td className="p-2">{parsed?.channelHash ?? 'unknown'}</td>
-                  <td className="p-2" title={parsed ? `hopLimit=${parsed.hopLimit} nextHop=${parsed.nextHop} relayNode=${parsed.relayNode}` : undefined}>
-                    {parsed?.flags ?? 'unknown'}
-                  </td>
-                  <td className="p-2">{parsed ? `${parsed.payloadBytes}B encrypted/unknown` : 'unknown'}</td>
+                  <td className="p-2 text-blue-300">{d?.from ?? parsed?.from ?? '?'}</td>
+                  <td className="p-2">{d?.to ?? (parsed ? `${parsed.kind}:${parsed.to}` : '?')}</td>
+                  <td className="p-2">{d?.packetId ?? parsed?.packetId ?? '?'}</td>
+                  <td className="p-2">{parsed?.channelHash ?? '?'}</td>
+                  <td className="p-2 max-w-xs truncate">{decodedCell}</td>
                   <td
-                    className="p-2 max-w-xs cursor-pointer hover:text-yellow-300 transition-colors"
+                    className="p-2 max-w-[120px] cursor-pointer hover:text-yellow-300 transition-colors truncate"
                     title="Click to copy full hex"
                     onClick={() => navigator.clipboard.writeText(r.payload)}
                   >
-                    {r.payload.slice(0, 48)}{r.payload.length > 48 ? '…' : ''}
+                    {r.payload.slice(0, 24)}…
                   </td>
                 </tr>
               );
             })}
             {mtrxLog.length === 0 && (
-              <tr><td colSpan={10} className="p-4 text-center text-gray-500">{observerMode ? 'Listening… no frames yet.' : 'Observer disabled.'}</td></tr>
+              <tr><td colSpan={9} className="p-4 text-center text-gray-500">{observerMode ? 'Listening… no frames yet.' : 'Observer disabled.'}</td></tr>
             )}
           </tbody>
         </table>

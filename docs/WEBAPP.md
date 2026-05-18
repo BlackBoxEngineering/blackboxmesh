@@ -30,6 +30,7 @@ toggle whose state is persisted in `localStorage`:
 | Browser GPS                    | `browserGeoEnabled`        | `navigator.geolocation.watchPosition`          |
 | Phone GPS                      | `gpsBridgeRunning`         | Polls the local `gps-bridge` on `:8080`        |
 | Mesh                           | `meshClient.autoConnect`   | WS to local `mqtt-bridge` on `:8081`           |
+| Meshtastic Observer            | `observerMode`             | Sends `BN MESH ON` to firmware on connect      |
 
 The Local Hub panel below shows liveness of the optional bridge services
 (`:8080`, `:8081`) but does **not** open any connection itself.
@@ -132,6 +133,31 @@ interface MeshtasticMessage {
 }
 ```
 
+### Two decode paths
+
+| Path | When | Decoder | Output |
+| ---- | ---- | ------- | ------ |
+| **Web Serial direct** | `dev:noserial` / end-user | `services/meshtasticDecoder.ts` (Web Crypto API, browser-side) | Inline in sniffer table |
+| **Bridge stack** | `npm run dev` | `services/meshtastic-decoder.ts` (Node.js crypto) | Map markers + Network messages feed |
+
+Both use the same algorithm: AES-128-CTR with the default LongFast PSK
+(`1PG7OiApB1nwvP+rz05pAQ==`). Frames using a private PSK show as
+"encrypted" with header info (from, to, RSSI) still visible.
+
+### Sniffer tab (Radio → Sniffer)
+
+- Observer mode toggle persists in `localStorage` — survives tab switches
+  and page reloads
+- Auto-sends `BN MESH ON` on radio reconnect if observer was enabled
+- Decoded frames show inline:
+  - 💬 Text messages (green)
+  - 👤 Node info with long name (cyan)
+  - 📍 GPS positions (yellow)
+  - Other portnums (blue)
+  - Private/encrypted (grey)
+
+### Map + Network view (bridge stack only)
+
 - **Map** — Meshtastic nodes render as **green** markers (BlackBoxMesh = orange).
   Popup shows long name, hardware model, altitude, RSSI/SNR.
 - **Network view** — `MeshtasticMessages` component shows decoded text messages
@@ -188,6 +214,7 @@ src/
 │   ├── meshClient.ts         # mesh WS singleton, node store, autoConnect
 │   ├── radioNodeAdapter.ts   # bridges serialClient RX/STATUS events → meshClient
 │   ├── mqttBridge.ts         # REST + WS primitives for mqtt-bridge (incl. Meshtastic endpoints)
+│   ├── meshtasticDecoder.ts  # browser-side AES-128-CTR decoder (Web Crypto API)
 │   ├── gpsService.ts         # browser geolocation + bridge polling
 │   ├── encryption.ts         # callEnDeCom — V2 AES-256-GCM via Lambda
 │   └── types.ts              # BlackBoxMeshNode, MeshtasticNode, MeshtasticMessage

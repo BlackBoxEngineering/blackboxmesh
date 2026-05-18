@@ -71,12 +71,26 @@ the firmware.
 
 ## Meshtastic decoder
 
-Decrypts and parses observed Meshtastic frames. Can run in two modes:
+Decrypts and parses observed Meshtastic frames. Two implementations exist:
+
+### Node.js decoder (`services/meshtastic-decoder.ts`)
+
+Used by the bridge stack. Can run in three modes:
 
 1. **Inline** — imported by `serial-bridge.ts`, called on every `BN MTRX` frame
 2. **Standalone CLI** — `npm run decode <hex> [<hex> ...]` for manual analysis
 3. **Live listener** — `npm run decoder` connects to the MQTT bridge WebSocket
    and prints decoded frames in real-time
+
+### Browser decoder (`webapp/src/services/meshtasticDecoder.ts`)
+
+Used by the Web Serial direct path (no bridges). Runs entirely in-browser
+using the Web Crypto API (`crypto.subtle`). Called from the RadioView sniffer
+tab on each `BN MTRX` event. Decoded data appears inline in the sniffer table.
+
+Observer mode state is persisted in `localStorage` (`observerMode` key) and
+automatically restored on radio reconnect — no need to re-enable it after
+leaving the sniffer tab or refreshing the page.
 
 ### Crypto details
 

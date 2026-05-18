@@ -83,6 +83,22 @@ running it holds COM3 exclusively, so the browser cannot also open it.
 4. `radioNodeAdapter` converts `BN RX` events via `meshClient.ingestRadioRx()` and `BN STATUS` events via `meshClient.upsertNode()`
 5. `useMeshNodes` subscribes to `meshClient.onNodes()` and renders markers on the map
 
+### Web Serial Meshtastic observation (no bridges)
+
+1. Observer mode is persisted in `localStorage` (`observerMode` key)
+2. On radio connect, if observer was enabled, `BN MESH ON` is auto-sent
+3. Firmware emits `BN MTRX <rssi> <snr> <hex>` for each captured frame
+4. `RadioView` sniffer tab receives the frame and calls `decodeMtrxFrame()` from
+   `services/meshtasticDecoder.ts` — a browser-side decoder using Web Crypto API
+   (AES-128-CTR, same default LongFast PSK)
+5. Decoded data (positions, node names, text messages) displayed inline in the
+   sniffer table with colour-coded icons:
+   - 💬 green = text message
+   - 👤 cyan = node info (long name, short name)
+   - 📍 yellow = GPS position
+   - blue = other decoded portnum
+   - grey = encrypted (private PSK)
+
 ### Bridge path (dev rig)
 
 1. Phone GPS → `gps-bridge` → `serial-bridge` polls every 10s → `BN GPS <lat> <lon> <acc>` over USB
