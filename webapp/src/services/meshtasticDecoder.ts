@@ -23,6 +23,7 @@ export interface DecodedMtrx {
   text?: string;
   nodeInfo?: { id?: string; longName?: string; shortName?: string; hwModel?: number };
   position?: { latitude?: number; longitude?: number; altitude?: number };
+  telemetry?: { voltage?: number; batteryLevel?: number; channelUtil?: number; airUtilTx?: number; uptime?: number };
 }
 
 function b64ToBytes(b64: string): Uint8Array {
@@ -46,6 +47,11 @@ function readU32LE(buf: Uint8Array, offset: number): number {
 
 function readI32LE(buf: Uint8Array, offset: number): number {
   return buf[offset] | (buf[offset + 1] << 8) | (buf[offset + 2] << 16) | (buf[offset + 3] << 24);
+}
+
+function readF32LE(buf: Uint8Array, offset: number): number {
+  const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  return view.getFloat32(offset, true);
 }
 
 function hexToBytes(hex: string): Uint8Array {
@@ -191,6 +197,23 @@ export async function decodeMtrxFrame(hex: string): Promise<DecodedMtrx> {
           if (f.field === 1 && f.wireType === 5 && f.bytes) result.position.latitude = readI32LE(f.bytes, 0) / 1e7;
           if (f.field === 2 && f.wireType === 5 && f.bytes) result.position.longitude = readI32LE(f.bytes, 0) / 1e7;
           if (f.field === 3 && f.varint !== undefined) result.position.altitude = f.varint;
+        }
+      } else if (result.portnumId === 67) {
+        // Telemetry: outer message has field 1=time(fixed32), field 2=DeviceMetrics(bytes)
+        const telFields = parseProtobuf(payloadF.bytes);
+        const metricsF = telFields.find(f => f.field === 2 && f.wireType === 2);
+        if (metricsF?.bytes) {
+          const dm = parseProtobuf(metricsF.bytes);
+          result.telemetry = {};
+          for (const f of dm) {
+            // DeviceMetrics: 1=batteryLevel(varint), 2=voltage(float/fixed32),
+            // 3=channelUtilization(float/fixed32), 4=airUtilTx(float/fixed32), 5=uptimeSeconds(varint)
+            if (f.field === 1 && f.varint !== undefined) result.telemetry.batteryLevel = f.varint;
+            if (f.field === 2 && f.wireType === 5 && f.bytes) result.telemetry.voltage = readF32LE(f.bytes, 0);
+            if (f.field === 3 && f.wireType === 5 && f.bytes) result.telemetry.channelUtil = readF32LE(f.bytes, 0);
+            if (f.field === 4 && f.wireType === 5 && f.bytes) result.telemetry.airUtilTx = readF32LE(f.bytes, 0);
+            if (f.field === 5 && f.varint !== undefined) result.telemetry.uptime = f.varint;
+          }
         }
       }
     }

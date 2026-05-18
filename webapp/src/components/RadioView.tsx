@@ -588,6 +588,15 @@ function SnifferTab({
                   decodedCell = <span className="text-cyan-300">👤 {d.nodeInfo.longName} ({d.nodeInfo.shortName})</span>;
                 } else if (d.position?.latitude != null) {
                   decodedCell = <span className="text-yellow-300">📍 {d.position.latitude.toFixed(5)}, {d.position.longitude?.toFixed(5)}</span>;
+                } else if (d.telemetry) {
+                  const t = d.telemetry;
+                  const parts: string[] = [];
+                  if (t.voltage != null) parts.push(`${t.voltage.toFixed(2)}V`);
+                  if (t.batteryLevel != null) parts.push(`${t.batteryLevel}%`);
+                  if (t.channelUtil != null) parts.push(`ch:${t.channelUtil.toFixed(1)}%`);
+                  if (t.airUtilTx != null) parts.push(`air:${t.airUtilTx.toFixed(1)}%`);
+                  if (t.uptime != null) parts.push(`up:${Math.floor(t.uptime / 3600)}h`);
+                  decodedCell = <span className="text-orange-300">🔋 {parts.join(' ')}</span>;
                 } else {
                   decodedCell = <span className="text-blue-300">{d.portnum ?? 'decrypted'}</span>;
                 }

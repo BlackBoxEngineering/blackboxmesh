@@ -260,6 +260,7 @@ export interface DecodedFrame {
   text?: string;
   nodeInfo?: NodeInfo;
   position?: Position;
+  telemetry?: { voltage?: number; batteryLevel?: number; channelUtil?: number; airUtilTx?: number; uptime?: number };
   fields?: ProtoField[];
   raw: string;
 }
@@ -329,6 +330,21 @@ export function decodeFrame(hex: string): DecodedFrame {
           result.nodeInfo = parseNodeInfo(payloadBuf);
         } else if (result.portnumId === 3) {
           result.position = parsePosition(payloadBuf);
+        } else if (result.portnumId === 67) {
+          // Telemetry: field 2 = DeviceMetrics sub-message
+          const telFields = parseProtobuf(payloadBuf);
+          const metricsField = telFields.find(f => f.field === 2 && f.type === 'bytes');
+          if (metricsField?.hex) {
+            const dm = parseProtobuf(Buffer.from(metricsField.hex, 'hex'));
+            result.telemetry = {};
+            for (const f of dm) {
+              if (f.field === 1 && f.type === 'varint') result.telemetry.batteryLevel = f.value;
+              if (f.field === 2 && f.type === 'fixed32') result.telemetry.voltage = Buffer.from(f.hex!, 'hex').readFloatLE(0);
+              if (f.field === 3 && f.type === 'fixed32') result.telemetry.channelUtil = Buffer.from(f.hex!, 'hex').readFloatLE(0);
+              if (f.field === 4 && f.type === 'fixed32') result.telemetry.airUtilTx = Buffer.from(f.hex!, 'hex').readFloatLE(0);
+              if (f.field === 5 && f.type === 'varint') result.telemetry.uptime = f.value;
+            }
+          }
         }
       }
       break;

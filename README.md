@@ -64,6 +64,8 @@ npm run decoder
 - [Firmware](docs/FIRMWARE.md)
 - [Services](docs/SERVICES.md)
 - [Webapp](docs/WEBAPP.md)
+- [Deployment (AWS)](docs/DEPLOYMENT.md)
+- [BlackBoxMesh vs Meshtastic](docs/COMPARISON.md)
 
 ## License
 
