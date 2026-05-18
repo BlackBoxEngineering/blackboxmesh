@@ -1,0 +1,15 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Blackbox -->
+  <rect x="20" y="20" width="160" height="160" rx="20" ry="20" fill="black" />
+  <!-- AI Circuitry Elements -->
+  <path d="M60 60 H80 V80 H60 Z" fill="white" />
+  <path d="M120 60 H140 V80 H120 Z" fill="white" />
+  <path d="M90 90 H110 V110 H90 Z" fill="white" />
+  <path d="M60 120 H80 V140 H60 Z" fill="white" />
+  <path d="M120 120 H140 V140 H120 Z" fill="white" />
+  <!-- Connecting Lines -->
+  <line x1="80" y1="70" x2="90" y2="90" stroke="white" stroke-width="2"/>
+  <line x1="110" y1="90" x2="120" y2="70" stroke="white" stroke-width="2"/>
+  <line x1="80" y1="130" x2="90" y2="110" stroke="white" stroke-width="2"/>
+  <line x1="110" y1="110" x2="120" y2="130" stroke="white" stroke-width="2"/>
+</svg>

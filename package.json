@@ -1,0 +1,15 @@
+{
+  "name": "blackboxmesh",
+  "version": "1.0.0",
+  "description": "BlackBoxMesh mesh networking system",
+  "scripts": {
+    "dev": "concurrently --raw -n \"MQTT,GPS,SER,WEB\" -c \"blue,green,magenta,cyan\" \"cd services && npm run mqtt\" \"cd services && npm run gps\" \"cd services && npm run serial\" \"cd webapp && npm run dev\"",
+    "dev:noserial": "concurrently --raw -n \"MQTT,GPS,WEB\" -c \"blue,green,cyan\" \"cd services && npm run mqtt\" \"cd services && npm run gps\" \"cd webapp && npm run dev\"",
+    "services": "cd services && npm run all",
+    "webapp": "cd webapp && npm run dev",
+    "install-all": "cd services && npm install && cd ../webapp && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
