@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { callEnDeCom } from '../services/encryption';
 import { serialClient, type SerialEvent, type SerialStatus } from '../services/serialClient';
-import { decodeMtrxFrame, type DecodedMtrx } from '../services/meshtasticDecoder';
+import { meshtasticStore, type MtrxRecord } from '../services/meshtasticStore';
 
 type Tab = 'messages' | 'peers' | 'sniffer' | 'telemetry' | 'console';
 
@@ -14,14 +14,6 @@ interface RxRecord {
   rssi: number;
   snr: number;
   payload: string;
-}
-
-interface MtrxRecord {
-  ts: number;
-  rssi: number;
-  snr: number;
-  payload: string;
-  decoded?: DecodedMtrx;
 }
 
 interface ParsedMeshtasticFrame {
@@ -96,11 +88,11 @@ function parseMeshtasticFrame(hex: string): ParsedMeshtasticFrame | null {
 }
 
 export function RadioView() {
-  const [tab, setTab] = useState<Tab>('messages');
+  const [tab, setTab] = useState<Tab>(() => (localStorage.getItem('radioTab') as Tab) || 'messages');
   const [status, setStatus] = useState<SerialStatus>(serialClient.getStatus());
   const [nodeId, setNodeId] = useState<string | null>(serialClient.getNodeId());
   const [rxLog, setRxLog] = useState<RxRecord[]>([]);
-  const [mtrxLog, setMtrxLog] = useState<MtrxRecord[]>([]);
+  const [mtrxLog, setMtrxLog] = useState<MtrxRecord[]>(meshtasticStore.mtrxLog);
   const [rawLog, setRawLog] = useState<{ ts: number; dir: 'in' | 'out'; line: string }[]>([]);
   const [lastStatus, setLastStatus] = useState<Record<string, unknown> | null>(null);
   const [observerMode, setObserverMode] = useState(() => localStorage.getItem('observerMode') === 'true');
@@ -109,12 +101,18 @@ export function RadioView() {
     return v ? Number(v) : null;
   });
 
-  // Auto-restore observer mode on reconnect
+  // Subscribe to meshtastic store for persistent log
+  useEffect(() => meshtasticStore.onLog(setMtrxLog), []);
+
+  // Auto-restore observer mode on reconnect (only once per mount)
+  const hasRestoredRef = useRef(false);
   useEffect(() => {
-    if (status === 'connected' && observerMode) {
+    if (status === 'connected' && observerMode && !hasRestoredRef.current) {
+      hasRestoredRef.current = true;
       serialClient.sendLine('BN MESH ON').catch(() => {});
     }
-  }, [status]);
+    if (status !== 'connected') hasRestoredRef.current = false;
+  }, [status, observerMode]);
 
   // Subscribe to serial events.
   useEffect(() => {
@@ -130,12 +128,8 @@ export function RadioView() {
           break;
         case 'mtrx':
           if (e.data) {
-            const rec = { ts: Date.now(), ...(e.data as Omit<MtrxRecord, 'ts'>) };
-            // Decode async, update record when done
-            decodeMtrxFrame(rec.payload).then(decoded => {
-              setMtrxLog(prev => prev.map(r => r.ts === rec.ts && r.payload === rec.payload ? { ...r, decoded } : r));
-            });
-            setMtrxLog((prev) => [...prev.slice(-MAX_LOG + 1), rec]);
+            const { rssi, snr, payload } = e.data as { rssi: number; snr: number; payload: string };
+            meshtasticStore.ingestFrame(rssi, snr, payload);
           }
           break;
         case 'status':
@@ -200,7 +194,7 @@ export function RadioView() {
         {(['messages', 'peers', 'sniffer', 'telemetry', 'console'] as Tab[]).map((t) => (
           <button
             key={t}
-            onClick={() => setTab(t)}
+            onClick={() => { setTab(t); localStorage.setItem('radioTab', t); }}
             className={`px-3 py-2 rounded-t transition-colors ${
               tab === t ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'
             }`}
