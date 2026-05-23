@@ -1,20 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { callEnDeCom } from '../services/encryption';
 import { serialClient, type SerialEvent, type SerialStatus } from '../services/serialClient';
-import { meshtasticStore, type MtrxRecord } from '../services/meshtasticStore';
+import { meshtasticStore, type MtrxRecord, type RxRecord } from '../services/meshtasticStore';
 
 type Tab = 'messages' | 'peers' | 'sniffer' | 'telemetry' | 'console';
-
-interface RxRecord {
-  ts: number;
-  from: string;
-  to: string;
-  type: number;
-  hops: number;
-  rssi: number;
-  snr: number;
-  payload: string;
-}
 
 interface ParsedMeshtasticFrame {
   to: string;
@@ -91,7 +80,7 @@ export function RadioView() {
   const [tab, setTab] = useState<Tab>(() => (localStorage.getItem('radioTab') as Tab) || 'messages');
   const [status, setStatus] = useState<SerialStatus>(serialClient.getStatus());
   const [nodeId, setNodeId] = useState<string | null>(serialClient.getNodeId());
-  const [rxLog, setRxLog] = useState<RxRecord[]>([]);
+  const [rxLog, setRxLog] = useState<RxRecord[]>(meshtasticStore.rxLog);
   const [mtrxLog, setMtrxLog] = useState<MtrxRecord[]>(meshtasticStore.mtrxLog);
   const [rawLog, setRawLog] = useState<{ ts: number; dir: 'in' | 'out'; line: string }[]>([]);
   const [lastStatus, setLastStatus] = useState<Record<string, unknown> | null>(null);
@@ -101,8 +90,9 @@ export function RadioView() {
     return v ? Number(v) : null;
   });
 
-  // Subscribe to meshtastic store for persistent log
+  // Subscribe to persistent stores
   useEffect(() => meshtasticStore.onLog(setMtrxLog), []);
+  useEffect(() => meshtasticStore.onRx(setRxLog), []);
 
   // Auto-restore observer mode on reconnect (only once per mount)
   const hasRestoredRef = useRef(false);
@@ -124,7 +114,10 @@ export function RadioView() {
           setNodeId(serialClient.getNodeId());
           break;
         case 'rx':
-          if (e.data) setRxLog((prev) => [...prev.slice(-MAX_LOG + 1), { ts: Date.now(), ...(e.data as Omit<RxRecord, 'ts'>) }]);
+          if (e.data) {
+            const rx = e.data as Omit<RxRecord, 'ts'>;
+            meshtasticStore.addRx(rx);
+          }
           break;
         case 'mtrx':
           if (e.data) {

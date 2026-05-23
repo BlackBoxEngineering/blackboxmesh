@@ -13,6 +13,17 @@ export interface MtrxRecord {
   decoded?: DecodedMtrx;
 }
 
+export interface RxRecord {
+  ts: number;
+  from: string;
+  to: string;
+  type: number;
+  hops: number;
+  rssi: number;
+  snr: number;
+  payload: string;
+}
+
 const MAX_LOG = 200;
 
 class MeshtasticStore {
@@ -80,6 +91,24 @@ class MeshtasticStore {
     this.emitLog();
     this.emitNodes();
     this.emitMessages();
+  }
+
+  // ─── BlackBoxMesh RX log (persistent) ───────────────────────────────────
+
+  private _rxLog: RxRecord[] = [];
+  private _rxCbs: Array<(log: RxRecord[]) => void> = [];
+
+  get rxLog(): RxRecord[] { return this._rxLog; }
+
+  addRx(rec: Omit<RxRecord, 'ts'>): void {
+    this._rxLog = [...this._rxLog.slice(-(MAX_LOG - 1)), { ts: Date.now(), ...rec }];
+    for (const cb of this._rxCbs) cb(this._rxLog);
+  }
+
+  onRx(cb: (log: RxRecord[]) => void): () => void {
+    this._rxCbs.push(cb);
+    cb(this._rxLog);
+    return () => { this._rxCbs = this._rxCbs.filter(x => x !== cb); };
   }
 
   onLog(cb: (log: MtrxRecord[]) => void): () => void {
