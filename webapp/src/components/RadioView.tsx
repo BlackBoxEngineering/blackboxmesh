@@ -562,20 +562,26 @@ function SnifferTab({
       </div>
 
       <div className="bg-gray-700 rounded max-h-96 overflow-y-auto">
+        <div className="sticky top-0 bg-gray-800 flex justify-between items-center px-2 py-1 z-10">
+          <span className="text-xs text-gray-400">Captured frames</span>
+          <button
+            onClick={() => {
+              const header = 'time\trssi\tsnr\tfrom\tto\tid\tch\tdecoded\thex';
+              const rows = mtrxLog.map(r => {
+                const d = r.decoded;
+                const decoded = d?.decrypted
+                  ? (d.text ? `TEXT: ${d.text}` : d.nodeInfo?.longName ? `NODEINFO: ${d.nodeInfo.longName}` : d.position?.latitude != null ? `POS: ${d.position.latitude.toFixed(5)},${d.position.longitude?.toFixed(5)}` : d.telemetry ? `TEL: ${d.telemetry.voltage?.toFixed(2)}V ${d.telemetry.batteryLevel}%` : d.portnum ?? 'decrypted') : 'encrypted';
+                return `${new Date(r.ts).toLocaleTimeString()}\t${r.rssi}\t${r.snr}\t${d?.from ?? '?'}\t${d?.to ?? '?'}\t${d?.packetId ?? '?'}\t${d?.channelHash != null ? '0x' + d.channelHash.toString(16).padStart(2, '0') : '?'}\t${decoded}\t${r.payload}`;
+              }).join('\n');
+              navigator.clipboard.writeText(header + '\n' + rows);
+            }}
+            className="text-xs px-2 py-0.5 rounded bg-gray-600 hover:bg-gray-500 text-gray-300 transition-colors"
+            title="Copy all rows to clipboard"
+          >
+            📋 Copy All
+          </button>
+        </div>
         <table className="w-full text-xs font-mono">
-          <thead className="sticky top-0 bg-gray-800 text-gray-400">
-            <tr>
-              <th className="text-left p-2">time</th>
-              <th className="text-left p-2">rssi</th>
-              <th className="text-left p-2">snr</th>
-              <th className="text-left p-2">from</th>
-              <th className="text-left p-2">to</th>
-              <th className="text-left p-2">id</th>
-              <th className="text-left p-2">ch</th>
-              <th className="text-left p-2">decoded</th>
-              <th className="text-left p-2">hex</th>
-            </tr>
-          </thead>
           <tbody>
             {mtrxLog.slice().reverse().map((r, i) => {
               const parsed = parseMeshtasticFrame(r.payload);

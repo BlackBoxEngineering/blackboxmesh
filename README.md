@@ -66,6 +66,7 @@ npm run decoder
 - [Webapp](docs/WEBAPP.md)
 - [Deployment (AWS)](docs/DEPLOYMENT.md)
 - [BlackBoxMesh vs Meshtastic](docs/COMPARISON.md)
+- [Regulatory & Physics](docs/REGULATORY.md)
 
 ## License
 

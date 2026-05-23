@@ -6,6 +6,8 @@ import { useGoogleMapsApi } from './useGoogleMapsApi';
 import { useMapGps } from './useMapGps';
 import { useMeshNodes } from './useMeshNodes';
 import { useMeshtastic } from '../../hooks/useMeshtastic';
+import { meshtasticStore } from '../../services/meshtasticStore';
+import { meshClient } from '../../services/meshClient';
 
 export function MapView({ browserGeoEnabled }: { browserGeoEnabled: boolean }) {
   const [mapStyle, setMapStyle] = useState(() => localStorage.getItem('mapStyle') || 'osm');
@@ -53,21 +55,30 @@ export function MapView({ browserGeoEnabled }: { browserGeoEnabled: boolean }) {
             </p>
           )}
         </div>
-        <select
-          value={mapStyle}
-          onChange={(event) => {
-            const newStyle = event.target.value;
-            setMapStyle(newStyle);
-            localStorage.setItem('mapStyle', newStyle);
-          }}
-          className="bg-gray-600 border border-gray-500 rounded px-3 py-2 text-sm"
-        >
-          <option value="osm">OpenStreetMap</option>
-          <option value="google">Google Maps</option>
-          <option value="satellite">Satellite</option>
-          <option value="hybrid">Hybrid</option>
-          <option value="terrain">Terrain</option>
-        </select>
+        <div className="flex gap-2">
+          <button
+            onClick={() => { meshtasticStore.clear(); meshClient.disconnect(); meshClient.connect(); }}
+            className="bg-gray-600 hover:bg-gray-500 text-xs px-3 py-2 rounded transition-colors"
+            title="Clear all stored nodes from the map"
+          >
+            🗑️ Clear Map
+          </button>
+          <select
+            value={mapStyle}
+            onChange={(event) => {
+              const newStyle = event.target.value;
+              setMapStyle(newStyle);
+              localStorage.setItem('mapStyle', newStyle);
+            }}
+            className="bg-gray-600 border border-gray-500 rounded px-3 py-2 text-sm"
+          >
+            <option value="osm">OpenStreetMap</option>
+            <option value="google">Google Maps</option>
+            <option value="satellite">Satellite</option>
+            <option value="hybrid">Hybrid</option>
+            <option value="terrain">Terrain</option>
+          </select>
+        </div>
       </div>
 
       <div className="h-full bg-gray-700 rounded-lg overflow-hidden relative">

@@ -17,7 +17,7 @@ export function NetworkView({
   return (
     <>
       <h2 className="text-xl mb-4">Network Services</h2>
-      <div className="space-y-4">
+      <div className="space-y-4 overflow-y-auto max-h-[calc(100vh-12rem)]">
         <div className="bg-gray-700 p-4 rounded-lg">
           <div className="flex items-center justify-between mb-3">
             <div>

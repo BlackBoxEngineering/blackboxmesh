@@ -73,6 +73,15 @@ class MeshtasticStore {
     }
   }
 
+  clear(): void {
+    this._mtrxLog = [];
+    this._nodes.clear();
+    this._messages = [];
+    this.emitLog();
+    this.emitNodes();
+    this.emitMessages();
+  }
+
   onLog(cb: (log: MtrxRecord[]) => void): () => void {
     this._logCbs.push(cb);
     cb(this._mtrxLog);
@@ -97,3 +106,6 @@ class MeshtasticStore {
 }
 
 export const meshtasticStore = new MeshtasticStore();
+
+// Debug: expose store on window for console inspection
+if (typeof window !== 'undefined') (window as any).__meshtasticStore = meshtasticStore;
