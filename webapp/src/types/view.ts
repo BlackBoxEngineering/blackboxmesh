@@ -1,1 +1,1 @@
-export type ActiveView = 'network' | 'config' | 'map' | 'radio';
+export type ActiveView = 'network' | 'settings' | 'map' | 'messages' | 'radio';

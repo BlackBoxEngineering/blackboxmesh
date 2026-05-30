@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useAppSettings } from '../hooks/useAppSettings';
 
 interface GoogleMapProps {
   children?: React.ReactNode;
@@ -28,6 +29,7 @@ export const GoogleMap = ({
   browserGPS = null,
   deviceGPS = null
 }: GoogleMapProps) => {
+  const [settings] = useAppSettings();
   const mapRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +39,7 @@ export const GoogleMap = ({
   const hasSetInitialCenter = useRef(false);
 
   useEffect(() => {
-    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+    const apiKey = settings.googleMapsApiKey;
     
     if (!apiKey) {
       setError('Google Maps API key not found');
@@ -93,7 +95,7 @@ export const GoogleMap = ({
     };
 
     loadGoogleMaps();
-  }, []);
+  }, [settings.googleMapsApiKey]);
 
   useLayoutEffect(() => {
     if (!mapRef.current || loading) return;

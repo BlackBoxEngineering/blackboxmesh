@@ -1,5 +1,6 @@
 import type { BridgeHealth, BrowserGpsControl, PhoneGpsControl } from '../layout/sidebarTypes';
 import { MeshtasticMessages } from '../components/Messages/MeshtasticMessages';
+import { useAppSettings } from '../hooks/useAppSettings';
 
 export function NetworkView({
   bridgeHealth,
@@ -14,10 +15,11 @@ export function NetworkView({
   floodAnnouncerRunning: boolean;
   onFloodAnnouncerToggle: () => void;
 }) {
+  const [settings] = useAppSettings();
   return (
     <>
-      <h2 className="text-xl mb-4">Network Services</h2>
-      <div className="space-y-4 overflow-y-auto max-h-[calc(100vh-12rem)]">
+      <h2 className="text-xl mb-4">Status</h2>
+      <div className="space-y-4">
         <div className="bg-gray-700 p-4 rounded-lg">
           <div className="flex items-center justify-between mb-3">
             <div>
@@ -39,7 +41,7 @@ export function NetworkView({
             </div>
           </div>
           <div className="space-y-1">
-            <div className="text-xs text-gray-400">Server: http://localhost:8080/gps</div>
+            <div className="text-xs text-gray-400">Server: {settings.gpsBridgeBaseUrl}/gps</div>
             {!bridgeHealth.gpsBridgeServerRunning && (
               <div className="text-xs text-yellow-400">Run: npm run dev (starts automatically)</div>
             )}
@@ -95,7 +97,7 @@ export function NetworkView({
                 {bridgeHealth.mqttBridgeRunning ? 'Running' : 'Not Running'}
               </span>
               <button
-                onClick={() => window.open('http://localhost:8081', '_blank')}
+                onClick={() => window.open(settings.mqttBridgeBaseUrl, '_blank')}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded transition-colors"
               >
                 Open Dashboard
@@ -103,7 +105,7 @@ export function NetworkView({
             </div>
           </div>
           <div className="space-y-1">
-            <div className="text-xs text-gray-400">Server: http://localhost:8081/report</div>
+            <div className="text-xs text-gray-400">Server: {settings.mqttBridgeBaseUrl}/report</div>
             {!bridgeHealth.mqttBridgeRunning && (
               <div className="text-xs text-yellow-400">Run: node services/mqtt-bridge.js</div>
             )}

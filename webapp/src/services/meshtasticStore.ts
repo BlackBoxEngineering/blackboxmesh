@@ -38,7 +38,7 @@ class MeshtasticStore {
   get nodes(): MeshtasticNode[] { return Array.from(this._nodes.values()); }
   get messages(): MeshtasticMessage[] { return this._messages; }
 
-  async ingestFrame(rssi: number, snr: number, payload: string): Promise<void> {
+  async ingestFrame(rssi: number, snr: number, payload: string): Promise<MtrxRecord> {
     const rec: MtrxRecord = { ts: Date.now(), rssi, snr, payload };
     this._mtrxLog = [...this._mtrxLog.slice(-(MAX_LOG - 1)), rec];
     this.emitLog();
@@ -48,7 +48,7 @@ class MeshtasticStore {
     this._mtrxLog = [...this._mtrxLog]; // trigger re-render
     this.emitLog();
 
-    if (!decoded.decrypted) return;
+    if (!decoded.decrypted) return rec;
 
     // Update node store
     const nodeId = decoded.from;
@@ -82,6 +82,7 @@ class MeshtasticStore {
       this._messages = [...this._messages.slice(-(MAX_LOG - 1)), msg];
       this.emitMessages();
     }
+    return rec;
   }
 
   clear(): void {

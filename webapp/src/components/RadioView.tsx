@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { callEnDeCom } from '../services/encryption';
-import { serialClient, type SerialEvent, type SerialStatus } from '../services/serialClient';
 import { meshtasticStore, type MtrxRecord, type RxRecord } from '../services/meshtasticStore';
+import { radioTransportManager } from '../services/transport/radioTransportManager';
+import type { TransportEvent, TransportStatus } from '../services/transport/types';
+import { fromBnRx, fromMeshtasticFrame, fromOutgoingBnCommand } from '../services/messages/adapter';
+import { messageStore } from '../services/messages/messageStore';
+import { terminalLogStore } from '../services/terminalLogStore';
 
 type Tab = 'messages' | 'peers' | 'sniffer' | 'telemetry' | 'console';
 
@@ -26,8 +30,6 @@ interface PeerInfo {
   minHops: number;
   count: number;
 }
-
-const MAX_LOG = 200;
 
 function hexEncode(s: string): string {
   return Array.from(new TextEncoder().encode(s))
@@ -78,11 +80,11 @@ function parseMeshtasticFrame(hex: string): ParsedMeshtasticFrame | null {
 
 export function RadioView() {
   const [tab, setTab] = useState<Tab>(() => (localStorage.getItem('radioTab') as Tab) || 'messages');
-  const [status, setStatus] = useState<SerialStatus>(serialClient.getStatus());
-  const [nodeId, setNodeId] = useState<string | null>(serialClient.getNodeId());
+  const [status, setStatus] = useState<TransportStatus>(radioTransportManager.getStatus());
+  const [nodeId, setNodeId] = useState<string | null>(radioTransportManager.getNodeId());
   const [rxLog, setRxLog] = useState<RxRecord[]>(meshtasticStore.rxLog);
   const [mtrxLog, setMtrxLog] = useState<MtrxRecord[]>(meshtasticStore.mtrxLog);
-  const [rawLog, setRawLog] = useState<{ ts: number; dir: 'in' | 'out'; line: string }[]>([]);
+  const [rawLog, setRawLog] = useState<{ ts: number; dir: 'in' | 'out'; line: string }[]>(terminalLogStore.getAll());
   const [lastStatus, setLastStatus] = useState<Record<string, unknown> | null>(null);
   const [observerMode, setObserverMode] = useState(() => localStorage.getItem('observerMode') === 'true');
   const [observerEnabledAt, setObserverEnabledAt] = useState<number | null>(() => {
@@ -93,36 +95,47 @@ export function RadioView() {
   // Subscribe to persistent stores
   useEffect(() => meshtasticStore.onLog(setMtrxLog), []);
   useEffect(() => meshtasticStore.onRx(setRxLog), []);
+  useEffect(() => terminalLogStore.onChange(setRawLog), []);
 
   // Auto-restore observer mode on reconnect (only once per mount)
   const hasRestoredRef = useRef(false);
   useEffect(() => {
     if (status === 'connected' && observerMode && !hasRestoredRef.current) {
       hasRestoredRef.current = true;
-      serialClient.sendLine('BN MESH ON').catch(() => {});
+      radioTransportManager.sendLine('BN MESH ON').catch(() => {});
     }
     if (status !== 'connected') hasRestoredRef.current = false;
   }, [status, observerMode]);
 
   // Subscribe to serial events.
   useEffect(() => {
-    const offStatus = serialClient.onStatus(setStatus);
-    const offEvent = serialClient.onEvent((e: SerialEvent) => {
-      setRawLog((prev) => [...prev.slice(-MAX_LOG + 1), { ts: Date.now(), dir: 'in', line: e.raw }]);
+    const offStatus = radioTransportManager.onStatus(setStatus);
+    const offEvent = radioTransportManager.onEvent((e: TransportEvent) => {
       switch (e.kind) {
         case 'ready':
-          setNodeId(serialClient.getNodeId());
+          setNodeId(radioTransportManager.getNodeId());
           break;
         case 'rx':
           if (e.data) {
             const rx = e.data as Omit<RxRecord, 'ts'>;
+            const ts = Date.now();
             meshtasticStore.addRx(rx);
+            messageStore.add(fromBnRx({ ts, from: rx.from, to: rx.to, payload: rx.payload, rssi: rx.rssi, snr: rx.snr }));
           }
           break;
         case 'mtrx':
           if (e.data) {
             const { rssi, snr, payload } = e.data as { rssi: number; snr: number; payload: string };
-            meshtasticStore.ingestFrame(rssi, snr, payload);
+            const ts = Date.now();
+            void meshtasticStore.ingestFrame(rssi, snr, payload).then((rec) => {
+              messageStore.add(fromMeshtasticFrame({
+                ts,
+                payload,
+                rssi,
+                snr,
+                decoded: rec.decoded,
+              }));
+            });
           }
           break;
         case 'status':
@@ -154,9 +167,17 @@ export function RadioView() {
   const lastSnr = rxLog.length > 0 ? rxLog[rxLog.length - 1].snr : undefined;
 
   const send = async (line: string) => {
-    setRawLog((prev) => [...prev.slice(-MAX_LOG + 1), { ts: Date.now(), dir: 'out', line }]);
+    const trimmed = line.trim();
+    if (trimmed === 'help' || trimmed === '?') {
+      terminalLogStore.addHelp();
+      return;
+    }
+
+    terminalLogStore.addOut(line);
+    const outMsg = fromOutgoingBnCommand({ ts: Date.now(), line });
+    if (outMsg) messageStore.add(outMsg);
     try {
-      await serialClient.sendLine(line);
+      await radioTransportManager.sendLine(line);
     } catch (e) {
       console.warn('[radio] send failed', e);
     }
@@ -688,12 +709,33 @@ function ConsoleTab({
   rawLog: { ts: number; dir: 'in' | 'out'; line: string }[];
   send: (line: string) => Promise<void>;
 }) {
+  const FILTER_KEY = 'radio.console.filters.v1';
   const [input, setInput] = useState('');
+  const [showIn, setShowIn] = useState(() => sessionStorage.getItem(`${FILTER_KEY}.showIn`) !== 'false');
+  const [showOut, setShowOut] = useState(() => sessionStorage.getItem(`${FILTER_KEY}.showOut`) !== 'false');
+  const [onlyErr, setOnlyErr] = useState(() => sessionStorage.getItem(`${FILTER_KEY}.onlyErr`) === 'true');
+  const [onlyHelp, setOnlyHelp] = useState(() => sessionStorage.getItem(`${FILTER_KEY}.onlyHelp`) === 'true');
+  const [query, setQuery] = useState(() => sessionStorage.getItem(`${FILTER_KEY}.query`) || '');
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const visibleLog = rawLog.filter((r) => {
+    if (!showIn && r.dir === 'in') return false;
+    if (!showOut && r.dir === 'out') return false;
+    if (onlyErr && !/^ERR\b/i.test(r.line)) return false;
+    if (onlyHelp && !/^BN\s/i.test(r.line) && r.line !== 'help') return false;
+    if (query && !r.line.toLowerCase().includes(query.toLowerCase())) return false;
+    return true;
+  });
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [rawLog]);
+  }, [visibleLog]);
+
+  useEffect(() => { sessionStorage.setItem(`${FILTER_KEY}.showIn`, String(showIn)); }, [showIn]);
+  useEffect(() => { sessionStorage.setItem(`${FILTER_KEY}.showOut`, String(showOut)); }, [showOut]);
+  useEffect(() => { sessionStorage.setItem(`${FILTER_KEY}.onlyErr`, String(onlyErr)); }, [onlyErr]);
+  useEffect(() => { sessionStorage.setItem(`${FILTER_KEY}.onlyHelp`, String(onlyHelp)); }, [onlyHelp]);
+  useEffect(() => { sessionStorage.setItem(`${FILTER_KEY}.query`, query); }, [query]);
 
   const onSubmit = async () => {
     const line = input.trim();
@@ -722,11 +764,24 @@ function ConsoleTab({
         </button>
       </div>
 
+      <div className="flex flex-wrap items-center gap-1 text-[11px]">
+        <button onClick={() => setShowIn((v) => !v)} className={`px-2 py-0.5 rounded ${showIn ? 'bg-green-800' : 'bg-gray-700'}`}>in</button>
+        <button onClick={() => setShowOut((v) => !v)} className={`px-2 py-0.5 rounded ${showOut ? 'bg-blue-800' : 'bg-gray-700'}`}>out</button>
+        <button onClick={() => setOnlyErr((v) => !v)} className={`px-2 py-0.5 rounded ${onlyErr ? 'bg-red-800' : 'bg-gray-700'}`}>errors</button>
+        <button onClick={() => setOnlyHelp((v) => !v)} className={`px-2 py-0.5 rounded ${onlyHelp ? 'bg-yellow-800' : 'bg-gray-700'}`}>help</button>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="search"
+          className="ml-auto bg-gray-800 px-2 py-0.5 rounded border border-gray-700 text-[11px]"
+        />
+      </div>
+
       <div ref={scrollRef} className="bg-black rounded p-2 max-h-96 overflow-y-auto text-xs font-mono">
-        {rawLog.length === 0 ? (
+        {visibleLog.length === 0 ? (
           <div className="text-gray-500">Raw serial in/out will appear here.</div>
         ) : (
-          rawLog.map((r, i) => (
+          visibleLog.map((r, i) => (
             <div key={`${r.ts}-${i}`} className={r.dir === 'in' ? 'text-green-300' : 'text-blue-300'}>
               <span className="text-gray-500">{new Date(r.ts).toLocaleTimeString()} </span>
               <span className="text-gray-500">{r.dir === 'in' ? '<' : '>'}</span> {r.line}

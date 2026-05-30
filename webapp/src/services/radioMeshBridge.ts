@@ -1,8 +1,8 @@
-import { serialClient } from './serialClient';
+import { radioTransportManager } from './transport/radioTransportManager';
 import { meshClient } from './meshClient';
 
 /**
- * Subscribes once (at app bootstrap) to serialClient RX events and forwards
+ * Subscribes once (at app bootstrap) to radio transport RX events and forwards
  * them into the mesh node store. Lives outside React so it is not affected
  * by component remounts under StrictMode.
  *
@@ -12,7 +12,7 @@ let stop: (() => void) | null = null;
 
 export function startRadioMeshBridge(): void {
   if (stop) return;
-  stop = serialClient.onEvent((event) => {
+  stop = radioTransportManager.onEvent((event) => {
     if (event.kind !== 'rx' || !event.data) return;
     const d = event.data as {
       from: string;

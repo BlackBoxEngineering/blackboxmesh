@@ -1,16 +1,25 @@
 import { useEffect } from 'react';
 import { gpsService } from '../services/gpsService';
-import { serialClient, type SerialStatus } from '../services/serialClient';
+import { radioTransportManager } from '../services/transport/radioTransportManager';
+import type { TransportStatus } from '../services/transport/types';
 
-export function useRadioGpsFeed(radioStatus: SerialStatus, browserGeoEnabled: boolean) {
+export function useRadioGpsFeed(radioStatus: TransportStatus, browserGeoEnabled: boolean) {
   useEffect(() => {
     if (radioStatus !== 'connected') return;
     let lastSent = 0;
+    let lastLat = 0;
+    let lastLon = 0;
+    const MIN_INTERVAL = 60000; // 60 seconds minimum between sends
+    const MIN_MOVE = 0.00005;   // ~5 metres before resending
+
     const sendFix = (lat: number, lon: number, acc: number) => {
       const now = Date.now();
-      if (now - lastSent < 5000) return;
+      const moved = Math.abs(lat - lastLat) > MIN_MOVE || Math.abs(lon - lastLon) > MIN_MOVE;
+      if (!moved && now - lastSent < MIN_INTERVAL) return;
       lastSent = now;
-      serialClient
+      lastLat = lat;
+      lastLon = lon;
+      radioTransportManager
         .sendLine(`BN GPS ${lat.toFixed(6)} ${lon.toFixed(6)} ${acc.toFixed(1)}`)
         .catch((error) => console.warn('[radio] sendLine failed', error));
     };

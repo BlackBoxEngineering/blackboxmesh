@@ -1,12 +1,12 @@
 import { meshClient } from './meshClient';
-import { serialClient } from './serialClient';
+import { radioTransportManager } from './transport/radioTransportManager';
 
 let unsubscribe: (() => void) | null = null;
 
 export const radioNodeAdapter = {
   start(): void {
     if (unsubscribe) return;
-    unsubscribe = serialClient.onEvent((event) => {
+    unsubscribe = radioTransportManager.onEvent((event) => {
       if (event.kind === 'rx') {
         const rx = event.data as { from: string; to: string; type: number; hops: number; rssi: number; snr: number; payload: string };
         meshClient.ingestRadioRx({ from: rx.from, type: rx.type, rssi: rx.rssi, snr: rx.snr, payload: rx.payload });

@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useAppSettings } from '../../hooks/useAppSettings';
 
 export function useGoogleMapsApi() {
   const [googleMapsReady, setGoogleMapsReady] = useState(false);
+  const [settings] = useAppSettings();
 
   useEffect(() => {
-    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+    const apiKey = settings.googleMapsApiKey;
 
     if (!apiKey || window.google?.maps) {
       setGoogleMapsReady(!!window.google?.maps);
@@ -24,7 +26,7 @@ export function useGoogleMapsApi() {
       };
       document.head.appendChild(script);
     }
-  }, []);
+  }, [settings.googleMapsApiKey]);
 
   return googleMapsReady;
 }

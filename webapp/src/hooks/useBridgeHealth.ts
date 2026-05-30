@@ -1,12 +1,5 @@
 import { useEffect, useState } from 'react';
-
-const GPS_BRIDGE_URL =
-  (import.meta.env.VITE_GPS_BRIDGE_URL as string | undefined) ||
-  'http://localhost:8080';
-
-const MQTT_BRIDGE_URL =
-  (import.meta.env.VITE_MQTT_BRIDGE_URL as string | undefined) ||
-  'http://localhost:8081';
+import { appSettings } from '../services/appSettings';
 
 export function useBridgeHealth() {
   const [phoneConnected, setPhoneConnected] = useState(false);
@@ -15,14 +8,15 @@ export function useBridgeHealth() {
 
   useEffect(() => {
     const checkGpsBridge = async () => {
+      const { gpsBridgeBaseUrl } = appSettings.get();
       try {
-        const response = await fetch(`${GPS_BRIDGE_URL}/status`, {
+        const response = await fetch(`${gpsBridgeBaseUrl}/status`, {
           signal: AbortSignal.timeout(1000),
         }).catch(() => null);
 
         if (response?.ok) {
           setGpsBridgeServerRunning(true);
-          const gpsResponse = await fetch(`${GPS_BRIDGE_URL}/gps`, {
+          const gpsResponse = await fetch(`${gpsBridgeBaseUrl}/gps`, {
             signal: AbortSignal.timeout(1000),
           }).catch(() => null);
           setPhoneConnected(gpsResponse?.ok || false);
@@ -42,8 +36,9 @@ export function useBridgeHealth() {
 
   useEffect(() => {
     const checkMqtt = async () => {
+      const { mqttBridgeBaseUrl } = appSettings.get();
       try {
-        const response = await fetch(`${MQTT_BRIDGE_URL}/status`, {
+        const response = await fetch(`${mqttBridgeBaseUrl}/status`, {
           signal: AbortSignal.timeout(1000),
         });
         setMqttBridgeRunning(response.ok);

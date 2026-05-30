@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { meshClient, type MeshStatus } from '../services/meshClient';
 import type { BlackBoxMeshNode } from '../services/types';
+import { appSettings } from '../services/appSettings';
 
 export function useMeshConnection() {
   const [status, setStatus] = useState<MeshStatus>(() => meshClient.getStatus());
@@ -14,6 +15,19 @@ export function useMeshConnection() {
       offStatus();
       offNodes();
     };
+  }, []);
+
+  useEffect(() => {
+    let prevMqtt = appSettings.get().mqttBridgeBaseUrl;
+    return appSettings.onChange((next) => {
+      if (next.mqttBridgeBaseUrl === prevMqtt) return;
+      prevMqtt = next.mqttBridgeBaseUrl;
+      const current = meshClient.getStatus();
+      if (current === 'connected' || current === 'connecting') {
+        meshClient.disconnect();
+        void meshClient.connect();
+      }
+    });
   }, []);
 
   const handleMeshToggle = async () => {

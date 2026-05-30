@@ -5,6 +5,8 @@ export interface GPSPosition {
   timestamp: number;
 }
 
+import { appSettings } from './appSettings';
+
 export class GPSService {
   private position: GPSPosition | null = null;
   private callbacks: ((position: GPSPosition | null) => void)[] = [];
@@ -39,7 +41,8 @@ export class GPSService {
     if (!this.enabled || localStorage.getItem('gps-phone') === 'false') return;
 
     try {
-      const response = await fetch('http://localhost:8080/gps', {
+      const { gpsBridgeBaseUrl } = appSettings.get();
+      const response = await fetch(`${gpsBridgeBaseUrl}/gps`, {
         signal: AbortSignal.timeout(2000)
       }).catch(() => null);
       

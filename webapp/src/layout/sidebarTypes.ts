@@ -1,5 +1,5 @@
-import type { SerialStatus } from '../services/serialClient';
 import type { MeshStatus } from '../services/meshClient';
+import type { TransportKind, TransportStatus } from '../services/transport/types';
 
 export interface BridgeHealth {
   gpsBridgeServerRunning: boolean;
@@ -7,10 +7,14 @@ export interface BridgeHealth {
 }
 
 export interface RadioControl {
-  status: SerialStatus;
+  status: TransportStatus;
   nodeId: string | null;
-  supported: boolean;
-  onToggle: () => void;
+  usbSupported: boolean;
+  bleSupported: boolean;
+  activeTransport: TransportKind;
+  onConnectUsb: () => void;
+  onConnectBle: () => void;
+  onDisconnect: () => void;
 }
 
 export interface MeshControl {
